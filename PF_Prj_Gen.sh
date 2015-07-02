@@ -1,0 +1,521 @@
+#! /bin/bash
+
+#Err Macro
+SUCCESS=0
+ERR_BUILD_BOARD=1 
+ERR_EXIST_DIR=2 
+ERR_NO_CFG=3
+ERR_TAGFILE_NOT_FOUND=4
+ERR_FILE_NOT_EXIST=5
+ERR_VERSION_MISMATCH=6
+ERR_PROGRAM_PARA=7
+ERR_TOOLKIT=8
+ERR_CHECK_CONFIG=9
+ERR_NO_TARGET_RELEASE=10
+ERR_FILE_ALREADY_EXIST=11
+ERR_NOT_EXIST=12
+ERR_CMD_NOT_FOUNT=13
+
+# Color used in echo
+## Text--forground
+Echo_Black_Text=`tput setaf 0`
+Echo_Red_Text=`tput setaf 1`
+Echo_Green_Text=`tput setaf 2`
+Echo_Yellow_Text=`tput setaf 3`
+Echo_Blue_Text=`tput setaf 4`
+Echo_Magenta_Text=`tput setaf 5`
+Echo_Cyan_Text=`tput setaf 6`
+Echo_White_Text=`tput setaf 7`
+Echo_Color_Reset=`tput sgr0`
+## background color
+Echo_Black_BG=`tput setab 0`
+Echo_Red_BG=`tput setab 1`
+Echo_Green_BG=`tput setab 2`
+Echo_Yellow_BG=`tput setab 3`
+Echo_Blue_BG=`tput setab 4`
+Echo_Magenta_BG=`tput setab 5`
+Echo_Cyan_BG=`tput setab 6`
+Echo_White_BG=`tput setab 7`
+Echo_Color_Reset=`tput sgr0`
+
+print_help()
+{
+    echo "Usage: "
+    ##              $0                                  $1                          $2
+    ##                                                  dir_to_be_count             result_dir 
+    echo "       ${Echo_Green_Text}`basename $0`  <Directory to be count> <result output directory>${Echo_Color_Reset}"
+	echo "       `basename $0` --help/-h"
+	echo
+	echo "For example:"
+    echo -e " \t `basename $0` kernel-ZZZ kernelResult"
+    echo -e " \t    this would count the valid source code line number of kernel source in kernel-ZZZ, the result would output to kernelResult"
+    echo 
+    echo -e " \t `basename $0` uboot-ZZZ ubootResult"
+    echo -e " \t    this would count the valid source code line number of uboot source in uboot-ZZZ, the result would be in ubootResult"
+}
+
+if [ $1 = "-h" -o $1 = "--help" ]; then
+    print_help
+    exit 0
+fi
+
+DIR_TO_BE_COUNT=$1
+cd "${DIR_TO_BE_COUNT}"  >/dev/null
+REALPATH_DIR_TO_BE_COUNT="${PWD}"
+cd - >/dev/null
+REALPATH_DIR_TO_BE_COUNT="${REALPATH_DIR_TO_BE_COUNT}""/"
+RESULT_DIR=$2
+
+Gen_Tmp="Gen_Tmp"
+if [ -d "${Gen_Tmp}" ] ; then
+    echo "${Gen_Tmp} already existed"
+else
+    mkdir "${Gen_Tmp}"
+fi
+HeadFileList_All="${Gen_Tmp}"/"HF_All.txt"
+HF_NoHost="${Gen_Tmp}"/"HF_NoHost.txt"
+HF_NoHost_ND="${Gen_Tmp}"/"HF_NoHost_ND.txt"
+HF_AbPath="${Gen_Tmp}"/"HF_AbosultePath.txt"
+HF_AbsPath_ND="${Gen_Tmp}"/"HF_AbosultePath_ND.txt"
+HF_RelPath="${Gen_Tmp}"/"HF_RelPath.txt"
+HF_RelPath_ND="${Gen_Tmp}"/"HF_RelPath_ND.txt"
+NotFound="${Gen_Tmp}"/"NotFound.txt"
+NotFound_TT="${Gen_Tmp}"/"NotFound_Type2.txt"
+Valid_HF="${Gen_Tmp}"/"Valid_HF.txt"
+VALID_SRC="${Gen_Tmp}"/"Valid_SRC.txt"
+NotFound_Verified="${Gen_Tmp}"/"NotFOund_Valid.txt"
+HF_NoPath="${Gen_Tmp}"/"HF_NoPath.txt"
+HF_NoPath_ND="${Gen_Tmp}"/"HF_NoPath_ND.txt"
+##Source code type: UBOOT KERNEL UNKNOWN
+SOURCE_CODE_TYPE=
+
+echo -e "${Echo_Yellow_BG}"
+echo -e "${Echo_Color_Reset}"
+yes '-' | head -n$(tput cols) | tr -d '\n'
+## Check the output directory whether is exist
+if [ ! -d "${RESULT_DIR}" ]; then
+    mkdir "${RESULT_DIR}"
+else
+    echo "${Echo_Red_Text}Direcotry $RESULT_DIR already exist${Echo_Color_Reset}"
+    exit ${ERR_EXIST_DIR}
+fi
+
+## Check the source code directory whether is exist
+if [ ! -d "${DIR_TO_BE_COUNT}" ]; then # Not found
+    echo "${Echo_Red_Text}Direcotry $DIR_TO_BE_COUNT NOT exist${Echo_Color_Reset}"
+    exit ${ERR_NOT_EXIST}
+fi
+
+U_BOOT_ID_FILE=u-boot
+KERNEL_ID_FILE=vmlinux
+
+## Check the source code type: u-boot or kernel
+if [ ! -e "${DIR_TO_BE_COUNT}"/"${U_BOOT_ID_FILE}" -a -e "${DIR_TO_BE_COUNT}"/"${KERNEL_ID_FILE}" ]; then
+    #echo "${Echo_Green_Text} ${DIR_TO_BE_COUNT} source code type is: kernel${Echo_Color_Reset}"
+    echo "Source code type is: [${Echo_Green_Text}kernel${Echo_Color_Reset}]"
+    SOURCE_CODE_TYPE="KERNEL"
+elif [ -e "${DIR_TO_BE_COUNT}"/"${U_BOOT_ID_FILE}" -a ! -e "${DIR_TO_BE_COUNT}"/"${KERNEL_ID_FILE}" ]; then
+    echo "Source code type is: [${Echo_Green_Text}u-boot${Echo_Color_Reset}]"
+    SOURCE_CODE_TYPE="UBOOT"
+else
+    echo "Source code type is: [${Echo_Red_Text}UNKNOWN${Echo_Color_Reset}]"
+    SOURCE_CODE_TYPE="UNKNOWN"
+    #exit $ERR_FILE_NOT_EXIST
+fi
+
+if [ "${SOURCE_CODE_TYPE}" = "KERNEL" ]; then
+    KERNEL_SRC_WORK_DIR=kernel_src_work_dir
+    KERNEL_HEADER_WORK_DIR=kernel_valid_header_files
+
+    KERNEL_VALID_HEADER_FILES=
+
+    # the source file used to be compiled (.S .s .c)
+    KERNEL_VALID_SRC_FILES=
+    KERNEL_VALID_SRC_FILES=`find "${DIR_TO_BE_COUNT}" -name '.*.o.cmd' -print0 | xargs -0 egrep ' := [alnum]' \
+        | grep -v '\-gcc' | grep -v  '\-ld' | grep -v ' := gcc'  | grep -v ' := g++' \
+        | awk -F':=' '{print $2}' | grep -v 'scripts'`
+
+    #######################################################################
+    # .S .c .s source file list
+    #######################################################################
+
+    ## copy the valid files
+    # file not found in dir_to_be_count
+    File_Not_Exist=
+    Index=0
+    for files in `echo "${KERNEL_VALID_SRC_FILES}" | sed -e 's/\ /\n/g'`; do
+        DIR_OF_FILES=`dirname "${files}"`
+        if [ ! -e "${DIR_TO_BE_COUNT}"/"${files}" ]; then
+            File_Not_Exist+="${DIR_TO_BE_COUNT}"/"${files}" 
+            File_Not_Exist+=" "
+            #echo "File not found: ${Echo_Red_Text}"${DIR_TO_BE_COUNT}"/"${files}" ${Echo_Color_Reset}"
+            continue
+        fi
+        ## keep the directory structure
+        #if [ ! -d "${RESULT_DIR}"/"${KERNEL_SRC_WORK_DIR}"/"${DIR_OF_FILES}" ]; then
+        #    mkdir -p "${RESULT_DIR}"/"${KERNEL_SRC_WORK_DIR}"/"${DIR_OF_FILES}" 
+        #fi
+        #cp "${DIR_TO_BE_COUNT}"/"${files}" "${RESULT_DIR}"/"${KERNEL_SRC_WORK_DIR}"/"${DIR_OF_FILES}"
+        echo "${files}" >> "${VALID_SRC}"
+        ((Index++))
+        echo -e -n "\rSource file[.c .S .s] Index:\t"
+        echo -e -n "[${Echo_Cyan_Text}${Index}${Echo_Color_Reset}]"
+    done
+
+    if [ -n "${File_Not_Exist}" ]; then
+        #echo "${Echo_Red_Text}Some files not found, please check:${Echo_Color_Reset}"
+        echo "${File_Not_Exist}" | sed -e 's/\ /\n/g' 
+    fi
+
+    #######################################################################
+    # .h header file copy
+    #######################################################################
+
+    ## copy the valid files
+    # file not found in dir_to_be_count
+    File_Not_Exist=
+    Index=0
+
+    # Find all the header files, include the host PCs, which is start with /usr
+    find "${DIR_TO_BE_COUNT}" -name .*.o.cmd  -print0 | xargs -0 grep '\.h' | awk '{for(i=2;i<=NF;i++){printf "%s ", $i}; printf "\n"}' \
+        | grep -v ':=' | sed -e 's/\$.*include/include/g' -e 's/\.h.*$/\.h/g' > "${HeadFileList_All}"
+    # Exclude the hostPCs header file. remain the toolchain libc header, linux kernel headerfiles
+    grep -v '^\/usr' "${HeadFileList_All}" > "${HF_NoHost}"
+    awk '!seen[$0]++'  "${HF_NoHost}" > "${HF_NoHost_ND}"
+
+    ## Type 1: absolutely path
+    # Sort the header files with absolutely path. Contain the toolchain libc header files, linux kenrel header files
+    grep '^\/' "${HF_NoHost}" > "${HF_AbPath}"
+    awk '!seen[$0]++'  "${HF_AbPath}" > "${HF_AbsPath_ND}"
+    ## Type 2: relative path
+    # Sort the header files with relative path, only the linux kernel header files
+    grep -v '^\/' "${HF_NoHost}" > "${HF_RelPath}"
+    awk '!seen[$0]++'  "${HF_RelPath}" > "${HF_RelPath_ND}"
+
+    ## Handle the Type 2: relative path
+    File_Not_Exist=
+    KERNEL_VALID_HEADER_FILES=
+    KERNEL_VALID_HEADER_FILES=`cat "${HF_RelPath_ND}"`
+    echo; yes '-' | head -n$(tput cols) | tr -d '\n'
+    echo "Header file list in relative path mode"
+    for files in `echo "${KERNEL_VALID_HEADER_FILES}" | sed -e 's/\ /\n/g'`; do
+        DIR_OF_FILES=`dirname "${files}"`
+        if [ ! -e "${DIR_TO_BE_COUNT}"/"${files}" ]; then
+            File_Not_Exist+="${DIR_TO_BE_COUNT}"/"${files}" 
+            File_Not_Exist+=" "
+            continue
+        fi
+        echo "${files}" >> "${Valid_HF}"
+        ((Index++))
+        echo -e -n "\rHeader file[.h] Index:\t"
+        echo -e -n "\t[${Echo_Cyan_Text}${Index}${Echo_Color_Reset}]"
+    done
+
+    if [ -n "${File_Not_Exist}" ]; then
+        #echo "${Echo_Red_Text}Some files not found, please check:${Echo_Color_Reset}"
+        echo "${File_Not_Exist}" | sed -e 's/\ /\n/g'  >> "${NotFound_TT}"
+    fi
+    ## Handle the Type 1: absolutely path
+    File_Not_Exist=
+    DIR_OF_FILES=
+    KERNEL_VALID_HEADER_FILES=
+    KERNEL_VALID_HEADER_FILES=`cat "${HF_AbsPath_ND}"`
+
+    ## For some dir is symbol link
+    cd "${DIR_TO_BE_COUNT}" && PATH_OF_CODE_DIR=`echo "${PWD}"` && cd - > /dev/null
+    #echo PATH_OF_CODE_DIR is "${PATH_OF_CODE_DIR}"
+
+    echo
+    yes '-' | head -n$(tput cols) | tr -d '\n'
+    echo "Header file list in absolutely path mode"
+    for files in `echo "${KERNEL_VALID_HEADER_FILES}" | sed -e 's/\ /\n/g'`; do
+        ## SubType 1: header files in kernel code
+        if [ -n `echo "${files}" | grep "${PATH_OF_CODE_DIR}"` ]; then
+            # files                                           -->   DIR_OF_FILES
+            #/home/XXX/YYY/kernel-ZZZ/include/XXX.h --> /kernel-ZZZ/include/XXX.h
+            DIR_OF_FILES=`echo "${files}" | sed -r "s#${PATH_OF_CODE_DIR}##"`
+
+            #/kernel-ZZZ/include/XXX.h  -->   /kernel-ZZZ/include/
+            DIR_OF_FILES=`dirname "${DIR_OF_FILES}"`
+
+            #echo DIR_OF_FILES is "${DIR_OF_FILES}"
+            if [ ! -e "${files}" ]; then
+                File_Not_Exist+="${files}" 
+                File_Not_Exist+=" "
+                #echo "File not found: ${Echo_Red_Text}"${DIR_TO_BE_COUNT}"/"${files}" ${Echo_Color_Reset}"
+                continue
+            fi
+            file_rel=`echo "${files}" | sed "s@^${REALPATH_DIR_TO_BE_COUNT}@@"`
+            #echo "${file_rel}"
+            echo "${file_rel}" >> "${Valid_HF}"
+            ((Index++))
+            echo -e -n "\rHeader file[.h] Index:\t"
+            echo -e -n "\t[${Echo_Cyan_Text}${Index}${Echo_Color_Reset}]"
+        ## Subtype 2: header file comes from the toolchain libc, we just skip it
+        else
+            continue
+        fi
+    done
+
+    if [ -n "${File_Not_Exist}" ]; then
+        echo "${Echo_Red_Text}Some files not found, please check:${Echo_Color_Reset}"
+        echo "${File_Not_Exist}" | sed -e 's/\ /\n/g'  >> "${NotFound}"
+    fi
+
+    ## See whether the file is existed
+    if [ -f "${NotFound_Verified}" ] ; then
+        echo "Starting verify type2" >> "${NotFound_Verified}"
+        for files in `cat "${NotFound_TT}"`; do
+            filename=`echo "${files}" | sed 's/^.*\///'`
+            #echo "${filename}"
+            Exist=`grep "${filename}" "${Valid_HF}"`
+            if [ -z "${Exist}" ] ; then
+                echo "${files}" >> "${NotFound_Verified}"
+            fi
+        done
+        echo "Done verify type2" >> "${NotFound_Verified}"
+        echo "Done verify type2"
+    fi
+    ## See whether the file is existed
+    if [ -f "${NotFound}" ] ; then
+        for files in `cat "${NotFound}"`; do
+            filename=`echo "${files}" | sed 's/^.*\///'`
+            Exist=`grep "${filename}" "${Valid_HF}"`
+            if [ -z "${Exist}" ] ; then
+                echo "${files}" >> "${NotFound_Verified}"
+            fi
+        done
+        echo "Done verify type1"
+    fi
+
+    if [ -e "${VALID_SRC}" -a -e "${Valid_HF}" ] ; then
+        cat "${VALID_SRC}" "${Valid_HF}" > valid_filelist.txt
+    fi
+    sed "s@^@${REALPATH_DIR_TO_BE_COUNT}@" -i valid_filelist.txt
+
+
+    for files in `cat valid_filelist.txt`; do
+        if [ ! -e "${files}" ] ; then
+            echo "Not found file: ${files}"
+        fi
+    done
+fi
+
+if [ "${SOURCE_CODE_TYPE}" = "UBOOT" ]; then
+    PATH_OF_CODE_DIR=
+    UBOOT_VALID_HEADER_FILES=
+    UBOOT_SRC_WORK_DIR=uboot_src_work_dir
+    UBOOT_HEADER_WORK_DIR=uboot_valid_header_files
+
+    ## For some dir is symbol link
+    cd "${DIR_TO_BE_COUNT}" && PATH_OF_CODE_DIR=`echo "${PWD}"` && cd - > /dev/null
+
+    # the source file used to be compiled (.S .s .c), exclude the tools and examples directories
+    UBOOT_VALID_SRC_FILES=
+    UBOOT_VALID_SRC_FILES=`cd "${DIR_TO_BE_COUNT}" && find -name .depend ! -path "./tools/*"  ! -path "./examples/*" \
+        | xargs  grep ':' | sed -e 's/.depend.*: //g' | sed -e 's/\ .*$//' && cd - >/dev/null`
+
+    #######################################################################
+    # .S .c .s source file copy
+    #######################################################################
+    ## create a directory to store the valid source file(.c .S .s)
+    if [ ! -d "${RESULT_DIR}"/"${UBOOT_SRC_WORK_DIR}" ]; then
+        mkdir "${RESULT_DIR}"/"${UBOOT_SRC_WORK_DIR}"
+    else
+        echo "${Echo_Red_Text}Direcotry "${RESULT_DIR}"/"${UBOOT_SRC_WORK_DIR}" already exist${Echo_Color_Reset}"
+        exit ${ERR_EXIST_DIR}
+    fi
+
+    ## copy the valid files
+    # file not found in dir_to_be_count
+    File_Not_Exist=
+    Index=0
+    for files in `echo "${UBOOT_VALID_SRC_FILES}" | sed -e 's/\ /\n/g'`; do
+        DIR_OF_FILES=`dirname "${files}"`
+        if [ ! -e "${DIR_TO_BE_COUNT}"/"${files}" ]; then
+            File_Not_Exist+="${DIR_TO_BE_COUNT}"/"${files}" 
+            File_Not_Exist+=" "
+            continue
+        fi
+        ## keep the directory structure
+        #if [ ! -d "${RESULT_DIR}"/"${UBOOT_SRC_WORK_DIR}"/"${DIR_OF_FILES}" ]; then
+        #    mkdir -p "${RESULT_DIR}"/"${UBOOT_SRC_WORK_DIR}"/"${DIR_OF_FILES}" 
+        #fi
+        #cp "${DIR_TO_BE_COUNT}"/"${files}" "${RESULT_DIR}"/"${UBOOT_SRC_WORK_DIR}"/"${DIR_OF_FILES}"
+        echo "${files}" >> "${VALID_SRC}"
+        ((Index++))
+        echo -e -n "\rSource file[.c .S .s] copied number: "
+        echo -e -n "\t[${Echo_Cyan_Text}${Index}${Echo_Color_Reset}]"
+    done
+
+    if [ -n "${File_Not_Exist}" ]; then
+        echo "${Echo_Red_Text}Some files not found, please check:${Echo_Color_Reset}"
+        echo "${File_Not_Exist}" | sed -e 's/\ /\n/g' 
+    fi
+
+    echo -e "\nUsing the following command to remove the tmp files:"
+    echo -e "\t rm -rf ${RESULT_DIR}/${UBOOT_SRC_WORK_DIR}"
+
+    #######################################################################
+    # .h header file copy
+    #######################################################################
+    ## create a directory to store the valid header file(.h)
+    if [ ! -d "${RESULT_DIR}"/"${UBOOT_HEADER_WORK_DIR}" ]; then
+        mkdir "${RESULT_DIR}"/"${UBOOT_HEADER_WORK_DIR}"
+    else
+        echo "${Echo_Red_Text}Direcotry "${RESULT_DIR}"/"${UBOOT_HEADER_WORK_DIR}" already exist${Echo_Color_Reset}"
+        exit ${ERR_EXIST_DIR}
+    fi
+
+    ## copy the valid files
+    # file not found in dir_to_be_count
+    File_Not_Exist=
+    Index=0
+
+    # Find all the header files, include the host PCs, which is start with /usr
+    find "${DIR_TO_BE_COUNT}" -name .depend ! -path "./tools/*"  ! -path "./examples/*" | xargs sed 's/^.*:\ .*\.[c|s|S]//' | tr -d '\\' | sed 's/\ /\n/g'\
+        > "${HeadFileList_All}"
+    # Remove the : line
+    sed -i '/:/d' "${HeadFileList_All}"
+    # Remove blank lines
+    sed  '/^$/d' -i "${HeadFileList_All}"
+    # Exclude the hostPCs header file. remain the toolchain libc header, linux uboot headerfiles
+    grep -v '^\/usr' "${HeadFileList_All}" > "${HF_NoHost}"
+    awk '!seen[$0]++' "${HF_NoHost}" > "${HF_NoHost_ND}"
+
+    ## Type 1: absolutely path
+    # Sort the header files with absolutely path. Contain the toolchain libc header files, linux kenrel header files
+    grep '^\/' "${HF_NoHost}" > "${HF_AbPath}"
+    awk '!seen[$0]++' "${HF_AbPath}" > "${HF_AbsPath_ND}"
+    ## Type 2: no path file
+    # Sort the header files with no path file, only the linux uboot header files
+    grep -v '^\/' "${HF_NoHost}" > "${HF_NoPath}"
+    awk '!seen[$0]++' "${HF_NoPath}" > "${HF_NoPath_ND}"
+
+    ## Handle the Type 2: No path file
+    File_Not_Exist=
+    PATH_OF_NOPATH_FILE=
+    UBOOT_VALID_HEADER_FILES=
+    UBOOT_VALID_HEADER_FILES=`cat "${HF_NoPath_ND}"`
+    for files in `echo "${UBOOT_VALID_HEADER_FILES}" | sed -e 's/\ /\n/g'`; do
+        #echo files is ${files}
+        cd "${DIR_TO_BE_COUNT}" && \
+            PATH_OF_NOPATH_FILE=`find -name .depend.* | xargs grep -w ${files} -nIR | \
+            sed "s/\.depend.*${files}/${files}/" | \
+            tr -d '\\' 2>/dev/null` \
+        && cd - > /dev/null
+
+        ## the depend is seperate to 2 line, eg:
+        #   a.o: \
+        #   c.c
+        # So we should remove the c.c
+        #DepFile=`find -name .depend | xargs grep : -A 1 | \
+        #    grep ':[[:space:]]\\' -A 1 | tail -n 1 | awk '{print $2}'`
+
+        #echo PATH_OF_NOPATH_FILE is $PATH_OF_NOPATH_FILE
+        PATH_OF_NOPATH_FILE=`echo ${PATH_OF_NOPATH_FILE} | awk -F' ' '{print $1}'`
+        #echo PATH_OF_NOPATH_FILE is $PATH_OF_NOPATH_FILE
+
+        DIR_OF_FILES=`dirname "${PATH_OF_NOPATH_FILE}"`
+        if [ ! -e ${DIR_TO_BE_COUNT}/${PATH_OF_NOPATH_FILE} ]; then
+            File_Not_Exist+=${DIR_TO_BE_COUNT}/${PATH_OF_NOPATH_FILE} 
+            File_Not_Exist+=" "
+            #echo "${DIR_TO_BE_COUNT}/${PATH_OF_NOPATH_FILE} not found!"
+            continue
+        fi
+        ## keep the directory structure
+        if [ ! -d "${RESULT_DIR}"/"${UBOOT_HEADER_WORK_DIR}"/"${DIR_OF_FILES}" ]; then
+            mkdir -p "${RESULT_DIR}"/"${UBOOT_HEADER_WORK_DIR}"/"${DIR_OF_FILES}" 
+        fi
+        #cp ${DIR_TO_BE_COUNT}/"${PATH_OF_NOPATH_FILE}" "${RESULT_DIR}"/"${UBOOT_HEADER_WORK_DIR}"/"${DIR_OF_FILES}"
+        echo "${files}" >> "${Valid_HF}"
+        ((Index++))
+        echo -e -n "\rHeader file[.h] copied number: "
+        echo -e -n "[${Echo_Cyan_Text}${Index}${Echo_Color_Reset}]"
+    done
+    #echo -e "${Echo_Green_Text}...Done${Echo_Color_Reset}"
+    echo -e "\nType 2 item number: ${Index}"
+
+    if [ -n "${File_Not_Exist}" ]; then
+        #echo "${Echo_Red_Text}Some files not found, see file: "${NotFound_TT}"${Echo_Color_Reset}"
+        echo "${File_Not_Exist}" | sed -e 's/\ /\n/g'  >> "${NotFound_TT}"
+    fi
+
+    ## Handle the Type 1: absolutely path
+    File_Not_Exist=
+    DIR_OF_FILES=
+    UBOOT_VALID_HEADER_FILES=
+    UBOOT_VALID_HEADER_FILES=`cat "${HF_AbsPath_ND}"`
+
+    ## For some dir is symbol link
+    cd "${DIR_TO_BE_COUNT}" && PATH_OF_CODE_DIR=`echo "${PWD}"` && cd - > /dev/null
+    #echo PATH_OF_CODE_DIR is "${PATH_OF_CODE_DIR}"
+
+    for files in `echo "${UBOOT_VALID_HEADER_FILES}" | sed -e 's/\ /\n/g'`; do
+        ## SubType 1: header files in uboot code
+        if [ -n `echo "${files}" | grep "${PATH_OF_CODE_DIR}"` ]; then
+            # files                                           -->   DIR_OF_FILES
+            #/home/XXX/YYY/uboot-ZZZ/include/XXX.h --> /uboot-ZZZ/include/XXX.h
+            DIR_OF_FILES=`echo "${files}" | sed -r "s#${PATH_OF_CODE_DIR}##"`
+
+            #/uboot-ZZZ/include/XXX.h  -->   /uboot-ZZZ/include/
+            DIR_OF_FILES=`dirname "${DIR_OF_FILES}"`
+
+            #echo DIR_OF_FILES is "${DIR_OF_FILES}"
+            if [ ! -e "${files}" ]; then
+                File_Not_Exist+="${files}" 
+                File_Not_Exist+=" "
+                #echo "File not found: ${Echo_Red_Text}"${DIR_TO_BE_COUNT}"/"${files}" ${Echo_Color_Reset}"
+                continue
+            fi
+            ## keep the directory structure
+            #if [ ! -d "${RESULT_DIR}"/"${UBOOT_HEADER_WORK_DIR}"/"${DIR_OF_FILES}" ]; then
+            #    mkdir -p "${RESULT_DIR}"/"${UBOOT_HEADER_WORK_DIR}"/"${DIR_OF_FILES}" 
+            #fi
+            #echo "${files}" "${RESULT_DIR}"/"${UBOOT_HEADER_WORK_DIR}"/"${DIR_OF_FILES}"
+            #cp "${files}" "${RESULT_DIR}"/"${UBOOT_HEADER_WORK_DIR}"/"${DIR_OF_FILES}"
+
+            file_rel=`echo "${files}" | sed "s@^${REALPATH_DIR_TO_BE_COUNT}@@"`
+            echo "${file_rel}" >> "${Valid_HF}"
+            ((Index++))
+            echo -e -n "\rCopying type 1 header file[.h], item index: "
+            echo -e -n "[${Echo_Cyan_Text}${Index}${Echo_Color_Reset}]"
+        ## Subtype 2: header file comes from the toolchain libc, we just skip it
+        else
+            continue
+        fi
+    done
+    #echo -e "${Echo_Green_Text}.\tDone${Echo_Color_Reset}"
+
+    if [ -n "${File_Not_Exist}" ]; then
+        echo "${Echo_Red_Text}Some files not found, please check:${Echo_Color_Reset}"
+        echo "${File_Not_Exist}" | sed -e 's/\ /\n/g'  > "${NotFound}"
+    fi
+
+    if [ -e "${VALID_SRC}" -a -e "${Valid_HF}" ] ; then
+        cat "${VALID_SRC}" "${Valid_HF}" > valid_filelist.txt
+    fi
+    sed "s@^@${REALPATH_DIR_TO_BE_COUNT}@" -i valid_filelist.txt
+
+    for files in `cat valid_filelist.txt`; do
+        if [ ! -e "${files}" ] ; then
+            echo "Not found file: ${files}"
+        fi
+    done
+    cat "${Valid_HF}" | sed 's/^/<F N="/' | sed 's/$/"\/>/' | sed 's/^/\t\t\t/' > valid_hf_se.txt
+    cat "${VALID_SRC}" | sed 's/^/<F N="/' | sed 's/$/"\/>/'| sed 's/^/\t\t\t/'  > valid_src_se.txt
+    cp misc/sample.vpj .
+    #sed '/Filters="*.c;*.C/r valid_src_se.txt' sample.vpj
+    sed '/<!--SRCFILES-->/r valid_src_se.txt' -i sample.vpj
+
+fi
+
+if [ "${SOURCE_CODE_TYPE}" = "UNKNOWN" ]; then
+    echo UNKNOWN
+fi
+
+echo -e "${Echo_Yellow_BG}"
+echo -e "${Echo_Color_Reset}"
+yes '-' | head -n$(tput cols) | tr -d '\n'
+
+exit 0
