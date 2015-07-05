@@ -205,6 +205,7 @@
 		<Folder
 			Name="Header Files"
 			Filters="*.h;*.H;*.hh;*.hpp;*.hxx;*.inc;*.sh;*.cpy;*.if">
+            <!--HEADFILES-->
 		</Folder>
 		<Folder
 			Name="Resource Files"

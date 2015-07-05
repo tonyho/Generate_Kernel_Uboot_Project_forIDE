@@ -64,7 +64,7 @@ cd "${DIR_TO_BE_COUNT}"  >/dev/null
 REALPATH_DIR_TO_BE_COUNT="${PWD}"
 cd - >/dev/null
 REALPATH_DIR_TO_BE_COUNT="${REALPATH_DIR_TO_BE_COUNT}""/"
-RESULT_DIR=$2
+RESULT_PRJ=$2
 
 Gen_Tmp="Gen_Tmp"
 if [ -d "${Gen_Tmp}" ] ; then
@@ -93,10 +93,10 @@ echo -e "${Echo_Yellow_BG}"
 echo -e "${Echo_Color_Reset}"
 yes '-' | head -n$(tput cols) | tr -d '\n'
 ## Check the output directory whether is exist
-if [ ! -d "${RESULT_DIR}" ]; then
-    mkdir "${RESULT_DIR}"
+if [ ! -d "${RESULT_PRJ}" ]; then
+    mkdir "${RESULT_PRJ}"
 else
-    echo "${Echo_Red_Text}Direcotry $RESULT_DIR already exist${Echo_Color_Reset}"
+    echo "${Echo_Red_Text}Direcotry $RESULT_PRJ already exist${Echo_Color_Reset}"
     exit ${ERR_EXIST_DIR}
 fi
 
@@ -151,11 +151,6 @@ if [ "${SOURCE_CODE_TYPE}" = "KERNEL" ]; then
             #echo "File not found: ${Echo_Red_Text}"${DIR_TO_BE_COUNT}"/"${files}" ${Echo_Color_Reset}"
             continue
         fi
-        ## keep the directory structure
-        #if [ ! -d "${RESULT_DIR}"/"${KERNEL_SRC_WORK_DIR}"/"${DIR_OF_FILES}" ]; then
-        #    mkdir -p "${RESULT_DIR}"/"${KERNEL_SRC_WORK_DIR}"/"${DIR_OF_FILES}" 
-        #fi
-        #cp "${DIR_TO_BE_COUNT}"/"${files}" "${RESULT_DIR}"/"${KERNEL_SRC_WORK_DIR}"/"${DIR_OF_FILES}"
         echo "${files}" >> "${VALID_SRC}"
         ((Index++))
         echo -e -n "\rSource file[.c .S .s] Index:\t"
@@ -171,7 +166,6 @@ if [ "${SOURCE_CODE_TYPE}" = "KERNEL" ]; then
     # .h header file copy
     #######################################################################
 
-    ## copy the valid files
     # file not found in dir_to_be_count
     File_Not_Exist=
     Index=0
@@ -296,7 +290,14 @@ if [ "${SOURCE_CODE_TYPE}" = "KERNEL" ]; then
 
     for files in `cat valid_filelist.txt`; do
         if [ ! -e "${files}" ] ; then
-            echo "Not found file: ${files}"
+            NotFoundFileName=`echo "${files}" | sed 's/^.*\///'`
+            sed 's@${files}@@' -i valid_filelist.txt
+            SearchMissFile=`find "${REALPATH_DIR_TO_BE_COUNT}" -name "${NotFoundFileName}"`
+            if [ -n "${SearchMissFile}" ] ; then
+                echo "${SearchMissFile}" >> valid_filelist.txt
+            else
+                echo "Not found file: ${files}"
+            fi
         fi
     done
 fi
@@ -316,17 +317,8 @@ if [ "${SOURCE_CODE_TYPE}" = "UBOOT" ]; then
         | xargs  grep ':' | sed -e 's/.depend.*: //g' | sed -e 's/\ .*$//' && cd - >/dev/null`
 
     #######################################################################
-    # .S .c .s source file copy
+    # .S .c .s source file
     #######################################################################
-    ## create a directory to store the valid source file(.c .S .s)
-    if [ ! -d "${RESULT_DIR}"/"${UBOOT_SRC_WORK_DIR}" ]; then
-        mkdir "${RESULT_DIR}"/"${UBOOT_SRC_WORK_DIR}"
-    else
-        echo "${Echo_Red_Text}Direcotry "${RESULT_DIR}"/"${UBOOT_SRC_WORK_DIR}" already exist${Echo_Color_Reset}"
-        exit ${ERR_EXIST_DIR}
-    fi
-
-    ## copy the valid files
     # file not found in dir_to_be_count
     File_Not_Exist=
     Index=0
@@ -337,37 +329,54 @@ if [ "${SOURCE_CODE_TYPE}" = "UBOOT" ]; then
             File_Not_Exist+=" "
             continue
         fi
-        ## keep the directory structure
-        #if [ ! -d "${RESULT_DIR}"/"${UBOOT_SRC_WORK_DIR}"/"${DIR_OF_FILES}" ]; then
-        #    mkdir -p "${RESULT_DIR}"/"${UBOOT_SRC_WORK_DIR}"/"${DIR_OF_FILES}" 
-        #fi
-        #cp "${DIR_TO_BE_COUNT}"/"${files}" "${RESULT_DIR}"/"${UBOOT_SRC_WORK_DIR}"/"${DIR_OF_FILES}"
         echo "${files}" >> "${VALID_SRC}"
         ((Index++))
         echo -e -n "\rSource file[.c .S .s] copied number: "
         echo -e -n "\t[${Echo_Cyan_Text}${Index}${Echo_Color_Reset}]"
     done
 
-    if [ -n "${File_Not_Exist}" ]; then
-        echo "${Echo_Red_Text}Some files not found, please check:${Echo_Color_Reset}"
-        echo "${File_Not_Exist}" | sed -e 's/\ /\n/g' 
-    fi
+    ## the depend is seperate to 2 line in .depend.XXX, eg:
+    #   a.o: \
+    #   c.c
+    # So we should remove the c.c
+    Src_In_Next_Line=`find "${DIR_TO_BE_COUNT}" -name .depend | xargs egrep ':[[:space:]]+\\$' -A 1 -h | awk 'BEGIN{RS="--"  } {print $1 $3}' | sed 's/o:.*\.//' | sed 's/spl//'`
 
-    echo -e "\nUsing the following command to remove the tmp files:"
-    echo -e "\t rm -rf ${RESULT_DIR}/${UBOOT_SRC_WORK_DIR}"
+    for files in `echo "${Src_In_Next_Line}" | sed -e 's/\ /\n/g'`; do
+        if [ ! -e "${files}" ] ; then
+                echo "${files}" >> "${VALID_SRC}"
+        else
+                echo "Not found:${files}"
+        fi
+    done
+
+    ## Handler the spl files, for these files the .c file path in .depend add a spl, lets remove it
+    for files in `echo "${File_Not_Exist}" | sed -e 's/\ /\n/g'`; do
+        if [ ! -e "${files}" ] ; then
+            #echo ccc
+            NotFound_Remove_SPL=`echo "${files}" | sed 's@spl@@'`
+            if [ -e "${NotFound_Remove_SPL}" ] ; then
+                echo "${NotFound_Remove_SPL}" >> "${VALID_SRC}"
+                File_Not_Exist=`echo "${File_Not_Exist}" | sed "s@${files}@@"`
+            fi
+        fi
+    done
+
+    if [ -n "${File_Not_Exist}" ]; then
+        echo
+        echo "${Echo_Red_Text}Check file status${Echo_Color_Reset}"
+        for files in `echo "${File_Not_Exist}" | sed -e 's/\ /\n/g'`; do
+            ## for the line like these: /home/github/BBB/u-boot/./spl/arch/arm/cpu/armv7/\
+            End_With_Slash=`echo "${files: -1}"`
+            if [ -z "${End_With_Slash}" ] ; then
+                echo "${files}"
+                #echo "${File_Not_Exist}" | sed -e 's/\ /\n/g' #| tr -d '\n' #sed 's/^$//'
+            fi
+        done
+    fi
 
     #######################################################################
     # .h header file copy
     #######################################################################
-    ## create a directory to store the valid header file(.h)
-    if [ ! -d "${RESULT_DIR}"/"${UBOOT_HEADER_WORK_DIR}" ]; then
-        mkdir "${RESULT_DIR}"/"${UBOOT_HEADER_WORK_DIR}"
-    else
-        echo "${Echo_Red_Text}Direcotry "${RESULT_DIR}"/"${UBOOT_HEADER_WORK_DIR}" already exist${Echo_Color_Reset}"
-        exit ${ERR_EXIST_DIR}
-    fi
-
-    ## copy the valid files
     # file not found in dir_to_be_count
     File_Not_Exist=
     Index=0
@@ -405,13 +414,6 @@ if [ "${SOURCE_CODE_TYPE}" = "UBOOT" ]; then
             tr -d '\\' 2>/dev/null` \
         && cd - > /dev/null
 
-        ## the depend is seperate to 2 line, eg:
-        #   a.o: \
-        #   c.c
-        # So we should remove the c.c
-        #DepFile=`find -name .depend | xargs grep : -A 1 | \
-        #    grep ':[[:space:]]\\' -A 1 | tail -n 1 | awk '{print $2}'`
-
         #echo PATH_OF_NOPATH_FILE is $PATH_OF_NOPATH_FILE
         PATH_OF_NOPATH_FILE=`echo ${PATH_OF_NOPATH_FILE} | awk -F' ' '{print $1}'`
         #echo PATH_OF_NOPATH_FILE is $PATH_OF_NOPATH_FILE
@@ -423,11 +425,6 @@ if [ "${SOURCE_CODE_TYPE}" = "UBOOT" ]; then
             #echo "${DIR_TO_BE_COUNT}/${PATH_OF_NOPATH_FILE} not found!"
             continue
         fi
-        ## keep the directory structure
-        if [ ! -d "${RESULT_DIR}"/"${UBOOT_HEADER_WORK_DIR}"/"${DIR_OF_FILES}" ]; then
-            mkdir -p "${RESULT_DIR}"/"${UBOOT_HEADER_WORK_DIR}"/"${DIR_OF_FILES}" 
-        fi
-        #cp ${DIR_TO_BE_COUNT}/"${PATH_OF_NOPATH_FILE}" "${RESULT_DIR}"/"${UBOOT_HEADER_WORK_DIR}"/"${DIR_OF_FILES}"
         echo "${files}" >> "${Valid_HF}"
         ((Index++))
         echo -e -n "\rHeader file[.h] copied number: "
@@ -468,12 +465,6 @@ if [ "${SOURCE_CODE_TYPE}" = "UBOOT" ]; then
                 #echo "File not found: ${Echo_Red_Text}"${DIR_TO_BE_COUNT}"/"${files}" ${Echo_Color_Reset}"
                 continue
             fi
-            ## keep the directory structure
-            #if [ ! -d "${RESULT_DIR}"/"${UBOOT_HEADER_WORK_DIR}"/"${DIR_OF_FILES}" ]; then
-            #    mkdir -p "${RESULT_DIR}"/"${UBOOT_HEADER_WORK_DIR}"/"${DIR_OF_FILES}" 
-            #fi
-            #echo "${files}" "${RESULT_DIR}"/"${UBOOT_HEADER_WORK_DIR}"/"${DIR_OF_FILES}"
-            #cp "${files}" "${RESULT_DIR}"/"${UBOOT_HEADER_WORK_DIR}"/"${DIR_OF_FILES}"
 
             file_rel=`echo "${files}" | sed "s@^${REALPATH_DIR_TO_BE_COUNT}@@"`
             echo "${file_rel}" >> "${Valid_HF}"
@@ -492,6 +483,12 @@ if [ "${SOURCE_CODE_TYPE}" = "UBOOT" ]; then
         echo "${File_Not_Exist}" | sed -e 's/\ /\n/g'  > "${NotFound}"
     fi
 
+fi
+    ############################################################################
+    ### Generate the filelist 
+    ############################################################################
+    sed "s@^${REALPATH_DIR_TO_BE_COUNT}@@" -i ${Valid_HF}
+    sed "s@^${REALPATH_DIR_TO_BE_COUNT}@@" -i ${VALID_SRC}
     if [ -e "${VALID_SRC}" -a -e "${Valid_HF}" ] ; then
         cat "${VALID_SRC}" "${Valid_HF}" > valid_filelist.txt
     fi
@@ -499,16 +496,57 @@ if [ "${SOURCE_CODE_TYPE}" = "UBOOT" ]; then
 
     for files in `cat valid_filelist.txt`; do
         if [ ! -e "${files}" ] ; then
-            echo "Not found file: ${files}"
+            NotFoundFileName=`echo "${files}" | sed 's/^.*\///'`
+            sed 's@${files}@@' -i valid_filelist.txt
+            SearchMissFile=`find "${REALPATH_DIR_TO_BE_COUNT}" -name "${NotFoundFileName}"`
+            if [ -n "${SearchMissFile}" ] ; then
+                echo "${SearchMissFile}" >> valid_filelist.txt
+            else
+                ## Remove the not found files
+                #echo "Not found file: ${files}"
+                sed "s@${files}@@" -i valid_filelist.txt
+                sed '/^$/d' -i valid_filelist.txt
+            fi
         fi
     done
-    cat "${Valid_HF}" | sed 's/^/<F N="/' | sed 's/$/"\/>/' | sed 's/^/\t\t\t/' > valid_hf_se.txt
-    cat "${VALID_SRC}" | sed 's/^/<F N="/' | sed 's/$/"\/>/'| sed 's/^/\t\t\t/'  > valid_src_se.txt
-    cp misc/sample.vpj .
-    #sed '/Filters="*.c;*.C/r valid_src_se.txt' sample.vpj
-    sed '/<!--SRCFILES-->/r valid_src_se.txt' -i sample.vpj
+    ## ./ --> /, // --> /
+    sed "s@\./@/@" -i valid_filelist.txt
+    sed "s@//@/@" -i valid_filelist.txt
 
-fi
+    for files in `cat valid_filelist.txt`; do
+        if [ ! -e "${files}" ] ; then
+            sed "s@${files}@@" -i valid_filelist.txt
+            sed '/^$/d' -i valid_filelist.txt
+        fi
+    done
+    sed "s@^${REALPATH_DIR_TO_BE_COUNT}@@" valid_filelist.txt > valid_filelist_NoPath.txt
+    cp valid_filelist_NoPath.txt FileList_SourceInsight.txt
+    cp valid_filelist.txt FileList_understand.txt
+
+    #sed "s@^@${REALPATH_DIR_TO_BE_COUNT}@" -i valid_filelist.txt
+    cat "${Valid_HF}" | sed "s@^@${REALPATH_DIR_TO_BE_COUNT}@" | sed 's/^/<F N="/' | sed 's/$/"\/>/' | sed 's/^/\t\t\t/' > valid_hf_se.txt
+    cat "${VALID_SRC}" | sed "s@^@${REALPATH_DIR_TO_BE_COUNT}@" | sed 's/^/<F N="/' | sed 's/$/"\/>/'| sed 's/^/\t\t\t/'  > valid_src_se.txt
+    sed "s@\./@/@" -i valid_hf_se.txt
+    sed "s@//@/@"  -i valid_hf_se.txt
+    sed "s@\./@/@" -i valid_src_se.txt
+    sed "s@//@/@"  -i valid_src_se.txt
+
+    cp misc/sample.vpj .
+    cp misc/sample.vpw .
+    ## !!TODO!! Add the dts file
+    ## Append to project file
+    sed '/<!--SRCFILES-->/r valid_src_se.txt' -i sample.vpj
+    sed '/<!--HEADFILES-->/r valid_hf_se.txt' -i sample.vpj
+    sed "s/PRJNAME/${RESULT_PRJ}/" -i sample.vpj
+    sed "s/PRJNAME/${RESULT_PRJ}/" -i sample.vpw
+    mkdir "${RESULT_PRJ}"/"${RESULT_PRJ}" 
+    mv sample.vpj "${RESULT_PRJ}"/"${RESULT_PRJ}"/"${RESULT_PRJ}".vpj
+    mv sample.vpw "${RESULT_PRJ}"/"${RESULT_PRJ}"/"${RESULT_PRJ}".vpw
+    mv valid*.txt "${Gen_Tmp}"
+    mv FileList_understand.txt "${RESULT_PRJ}"
+    mv FileList_SourceInsight.txt "${RESULT_PRJ}"
+    rm ."${Gen_Tmp}" -rf 2>/dev/null && mv "${Gen_Tmp}" ."${Gen_Tmp}"
+    sync
 
 if [ "${SOURCE_CODE_TYPE}" = "UNKNOWN" ]; then
     echo UNKNOWN
