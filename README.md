@@ -8,16 +8,18 @@ If you use the source insight or Scitools Understand, or SlickEdit to broswe the
 
 ##Usage
 ####Video
-You may want to see the video PF_Prj_Gen_example.mkv in directory usge of repo.
+You may want to see the video `PF_Prj_Gen_example.mkv` in directory usge of repo.
 In the video, I show the generation and the usage of the Generation file/project for Understand and SlickEdit.
-The Source Insight is same.
+
+Also a video(SourceInsight_Example.mkv in usage directory of this repo) shows the generation fo filelist for the Source Insight.
+
 
 ###Text word
 ####0. compile
 compile the kernel or u-boot source code
 ####1. clone
 
-    `git clone https://github.com/tonyho/Generate_Kernel_Uboot_Project_forIDE.git`
+    git clone https://github.com/tonyho/Generate_Kernel_Uboot_Project_forIDE.git
 
 ####2. Generate
     
@@ -29,4 +31,4 @@ This would create the filelist for Understand and Source Insight and the Slicked
 ##ToDo
 -   Add Eclipse support
 -   Add Source Navigator Support
--   Add the dts for kernel/uboot
+-   Add the dts for kernel/uboot filelist

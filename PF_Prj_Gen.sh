@@ -287,7 +287,7 @@ if [ "${SOURCE_CODE_TYPE}" = "KERNEL" ]; then
     fi
     sed "s@^@${REALPATH_DIR_TO_BE_COUNT}@" -i valid_filelist.txt
 
-
+    echo
     for files in `cat valid_filelist.txt`; do
         if [ ! -e "${files}" ] ; then
             NotFoundFileName=`echo "${files}" | sed 's/^.*\///'`
