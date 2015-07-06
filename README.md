@@ -14,7 +14,7 @@ In the video, I show the generation and the usage of the Generation file/project
 Also a video(SourceInsight_Example.mkv in usage directory of this repo) shows the generation fo filelist for the Source Insight.
 
 Below is a GIF show:
-![intro](https://github.com/tonyho/Generate_Kernel_Uboot_Project_forIDE/blob/master/GenProjectFilelist.gif?raw=true "intro")
+![intro](https://raw.githubusercontent.com/tonyho/Generate_Kernel_Uboot_Project_forIDE/master/usage/GenProjectFilelist.gif?raw=true "Demo")
 
 ###Text word
 ####0. compile
