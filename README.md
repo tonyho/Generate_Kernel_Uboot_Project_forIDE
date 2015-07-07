@@ -11,12 +11,24 @@ If you use the source insight or Scitools Understand, or SlickEdit to broswe the
 You may want to see the video `PF_Prj_Gen_example.mkv` in directory usge of repo.
 In the video, I show the generation and the usage of the Generation file/project for Understand and SlickEdit.
 
-Also a video(SourceInsight_Example.mkv in usage directory of this repo) shows the generation fo filelist for the Source Insight.
+Also a video(SourceInsight_Example.mkv in usage directory of this repo) shows the generation of filelist for the Source Insight.
 
-Below is a GIF show:
-![intro](https://raw.githubusercontent.com/tonyho/Generate_Kernel_Uboot_Project_forIDE/master/usage/GenProjectFilelist.gif?raw=true "Demo")
+####GIF show
+######How to generate
+Below is a GIF, shows how to generate the filelist and slickedit workspace/project, the parameters of command:
 
-###Text word
+-   Parameter1, directory of compiled source code, here is kernel: ~/github/BBB/Sebastian-BBB-Hibernation-2 
+-   Parameter2, Output directory and slickedit workspace(and project) name
+
+![intro](https://raw.githubusercontent.com/tonyho/Generate_Kernel_Uboot_Project_forIDE/master/usage/GenProjectFilelist.gif?raw=true "Generation of filelist")
+
+######Usage of the generation for Source Insight
+![intro](https://raw.githubusercontent.com/tonyho/Generate_Kernel_Uboot_Project_forIDE/master/usage/SourceInsight_show.gif?raw=true "Slickedit demo")
+
+######Usage of the generation for SlickEdit
+![intro](https://raw.githubusercontent.com/tonyho/Generate_Kernel_Uboot_Project_forIDE/master/usage/SlickEdit_show.gif?raw=true "Slickedit demo")
+
+###Text word illustration
 ####0. compile
 compile the kernel or u-boot source code
 ####1. clone
