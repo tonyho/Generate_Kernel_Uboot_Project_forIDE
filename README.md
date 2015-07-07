@@ -23,10 +23,14 @@ Below is a GIF, shows how to generate the filelist and slickedit workspace/proje
 ![intro](https://raw.githubusercontent.com/tonyho/Generate_Kernel_Uboot_Project_forIDE/master/usage/GenProjectFilelist.gif?raw=true "Generation of filelist")
 
 ######Usage of the generation for Source Insight
+Below Gif shows the procedure of generation and import
 ![intro](https://raw.githubusercontent.com/tonyho/Generate_Kernel_Uboot_Project_forIDE/master/usage/SourceInsight_show.gif?raw=true "Slickedit demo")
 
 ######Usage of the generation for SlickEdit
 ![intro](https://raw.githubusercontent.com/tonyho/Generate_Kernel_Uboot_Project_forIDE/master/usage/SlickEdit_show.gif?raw=true "Slickedit demo")
+
+######Usage of the generation for Scitools Understand
+![intro](https://raw.githubusercontent.com/tonyho/Generate_Kernel_Uboot_Project_forIDE/master/usage/Understand_show.gif?raw=true "Slickedit demo")
 
 ###Text word illustration
 ####0. compile
