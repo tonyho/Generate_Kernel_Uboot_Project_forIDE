@@ -131,7 +131,7 @@ if [ "${SOURCE_CODE_TYPE}" = "KERNEL" ]; then
 
     # the source file used to be compiled (.S .s .c)
     KERNEL_VALID_SRC_FILES=
-    KERNEL_VALID_SRC_FILES=`find "${DIR_TO_BE_COUNT}" -name '.*.o.cmd' -print0 | xargs -0 egrep ' := [alnum]' \
+    KERNEL_VALID_SRC_FILES=`find "${DIR_TO_BE_COUNT}" ! -path \*/.built-in.o.cmd -name '.*.o.cmd' -print0 |  xargs -0 egrep ":=[[:space:]]+[[:alnum:]]+" \
         | grep -v '\-gcc' | grep -v  '\-ld' | grep -v ' := gcc'  | grep -v ' := g++' \
         | awk -F':=' '{print $2}' | grep -v 'scripts'`
 
@@ -296,7 +296,10 @@ if [ "${SOURCE_CODE_TYPE}" = "KERNEL" ]; then
             if [ -n "${SearchMissFile}" ] ; then
                 echo "${SearchMissFile}" >> valid_filelist.txt
             else
-                echo "Not found file: ${files}"
+                ## exclude the libc header files
+                if [ "stdarg.h" != "${NotFoundFileName}"  ] ; then
+                    echo "Not found file: ${files}"
+                fi
             fi
         fi
     done
@@ -331,9 +334,10 @@ if [ "${SOURCE_CODE_TYPE}" = "UBOOT" ]; then
         fi
         echo "${files}" >> "${VALID_SRC}"
         ((Index++))
-        echo -e -n "\rSource file[.c .S .s] copied number: "
+        echo -e -n "\rSource file[.c .S .s] Index: "
         echo -e -n "\t[${Echo_Cyan_Text}${Index}${Echo_Color_Reset}]"
     done
+    echo
 
     ## the depend is seperate to 2 line in .depend.XXX, eg:
     #   a.o: \
@@ -410,7 +414,7 @@ if [ "${SOURCE_CODE_TYPE}" = "UBOOT" ]; then
         #echo files is ${files}
         cd "${DIR_TO_BE_COUNT}" && \
             PATH_OF_NOPATH_FILE=`find -name .depend.* | xargs grep -w ${files} -nIR | \
-            sed "s/\.depend.*${files}/${files}/" | \
+            sed "s@\.depend.*${files}@${files}@" | \
             tr -d '\\' 2>/dev/null` \
         && cd - > /dev/null
 
@@ -427,7 +431,7 @@ if [ "${SOURCE_CODE_TYPE}" = "UBOOT" ]; then
         fi
         echo "${files}" >> "${Valid_HF}"
         ((Index++))
-        echo -e -n "\rHeader file[.h] copied number: "
+        echo -e -n "\rHeader file[.h] Index: "
         echo -e -n "[${Echo_Cyan_Text}${Index}${Echo_Color_Reset}]"
     done
     #echo -e "${Echo_Green_Text}...Done${Echo_Color_Reset}"
