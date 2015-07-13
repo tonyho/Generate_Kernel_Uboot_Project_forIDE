@@ -108,13 +108,14 @@ fi
 
 U_BOOT_ID_FILE=u-boot
 KERNEL_ID_FILE=vmlinux
+DotConfig=".config"
 
 ## Check the source code type: u-boot or kernel
 if [ ! -e "${DIR_TO_BE_COUNT}"/"${U_BOOT_ID_FILE}" -a -e "${DIR_TO_BE_COUNT}"/"${KERNEL_ID_FILE}" ]; then
     #echo "${Echo_Green_Text} ${DIR_TO_BE_COUNT} source code type is: kernel${Echo_Color_Reset}"
     echo "Source code type is: [${Echo_Green_Text}kernel${Echo_Color_Reset}]"
     SOURCE_CODE_TYPE="KERNEL"
-elif [ -e "${DIR_TO_BE_COUNT}"/"${U_BOOT_ID_FILE}" -a ! -e "${DIR_TO_BE_COUNT}"/"${KERNEL_ID_FILE}" ]; then
+elif [ -e "${DIR_TO_BE_COUNT}"/"${U_BOOT_ID_FILE}" -a -e "${DIR_TO_BE_COUNT}"/"${U_BOOT_ID_FILE}" ]; then
     echo "Source code type is: [${Echo_Green_Text}u-boot${Echo_Color_Reset}]"
     SOURCE_CODE_TYPE="UBOOT"
 else
@@ -122,8 +123,14 @@ else
     SOURCE_CODE_TYPE="UNKNOWN"
     #exit $ERR_FILE_NOT_EXIST
 fi
+if [ -e "${DIR_TO_BE_COUNT}"/"${DotConfig}" -a "UBOOT" == "${SOURCE_CODE_TYPE}" ]; then
+    echo "U-boot: [${Echo_Green_Text}has .config${Echo_Color_Reset}]"
+    SOURCE_CODE_TYPE="UBOOT_WITH_DOTCONFIG"
+elif [ ! -e "${DIR_TO_BE_COUNT}"/"${DotConfig}" -a "UBOOT" == "${SOURCE_CODE_TYPE}" ]; then
+    echo "U-boot: [${Echo_Green_Text}without .config${Echo_Color_Reset}]"
+fi
 
-if [ "${SOURCE_CODE_TYPE}" = "KERNEL" ]; then
+if [ "${SOURCE_CODE_TYPE}" == "UBOOT_WITH_DOTCONFIG" -o "${SOURCE_CODE_TYPE}" == "KERNEL" ]; then
     KERNEL_SRC_WORK_DIR=kernel_src_work_dir
     KERNEL_HEADER_WORK_DIR=kernel_valid_header_files
 
@@ -131,9 +138,9 @@ if [ "${SOURCE_CODE_TYPE}" = "KERNEL" ]; then
 
     # the source file used to be compiled (.S .s .c)
     KERNEL_VALID_SRC_FILES=
-    KERNEL_VALID_SRC_FILES=`find "${DIR_TO_BE_COUNT}" ! -path \*/.built-in.o.cmd -name '.*.o.cmd' -print0 |  xargs -0 egrep ":=[[:space:]]+[[:alnum:]]+" \
+    KERNEL_VALID_SRC_FILES=`find "${DIR_TO_BE_COUNT}" ! -path "./tools/*"  ! -path "./examples/*" ! -path \*/.built-in.o.cmd -name '.*.o.cmd' -print0 |  xargs -0 egrep ":=[[:space:]]+[[:alnum:]]+" \
         | grep -v '\-gcc' | grep -v  '\-ld' | grep -v ' := gcc'  | grep -v ' := g++' \
-        | awk -F':=' '{print $2}' | grep -v 'scripts'`
+        | awk -F':=' '{print $2}' | grep -v 'scripts' | grep -v 'tools'`
 
     #######################################################################
     # .S .c .s source file list
@@ -435,7 +442,7 @@ if [ "${SOURCE_CODE_TYPE}" = "UBOOT" ]; then
         echo -e -n "[${Echo_Cyan_Text}${Index}${Echo_Color_Reset}]"
     done
     #echo -e "${Echo_Green_Text}...Done${Echo_Color_Reset}"
-    echo -e "\nType 2 item number: ${Index}"
+    #echo -e "\nType 2 item number: ${Index}"
 
     if [ -n "${File_Not_Exist}" ]; then
         #echo "${Echo_Red_Text}Some files not found, see file: "${NotFound_TT}"${Echo_Color_Reset}"
@@ -473,7 +480,7 @@ if [ "${SOURCE_CODE_TYPE}" = "UBOOT" ]; then
             file_rel=`echo "${files}" | sed "s@^${REALPATH_DIR_TO_BE_COUNT}@@"`
             echo "${file_rel}" >> "${Valid_HF}"
             ((Index++))
-            echo -e -n "\rCopying type 1 header file[.h], item index: "
+            echo -e -n "\rType 1 header file[.h], item index: "
             echo -e -n "[${Echo_Cyan_Text}${Index}${Echo_Color_Reset}]"
         ## Subtype 2: header file comes from the toolchain libc, we just skip it
         else
