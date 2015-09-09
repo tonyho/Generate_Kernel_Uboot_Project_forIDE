@@ -136,11 +136,28 @@ if [ "${SOURCE_CODE_TYPE}" == "UBOOT_WITH_DOTCONFIG" -o "${SOURCE_CODE_TYPE}" ==
 
     KERNEL_VALID_HEADER_FILES=
 
+    # Get kernel version
+    VER=`head -n 3 ${DIR_TO_BE_COUNT}/Makefile | awk -F'=' '{print $2}'`
+    KERN_VERSION=`echo ${VER} | awk '{print $1}'`
+    KERN_PATCHLEVEL=`echo ${VER} | awk '{print $2}'`
+    KERN_SUBLEVEL=`echo ${VER} | awk '{print $3}'`
+
+    #echo VER=${VER}
+    #echo VERSION=[${KERN_VERSION}], KERN_PATCHLEVEL=[${KERN_PATCHLEVEL}], KERN_SUBLEVEL=[${KERN_SUBLEVEL}]
     # the source file used to be compiled (.S .s .c)
     KERNEL_VALID_SRC_FILES=
-    KERNEL_VALID_SRC_FILES=`find "${DIR_TO_BE_COUNT}" ! -path "./tools/*"  ! -path "./examples/*" ! -path \*/.built-in.o.cmd -name '.*.o.cmd' -print0 |  xargs -0 egrep ":=[[:space:]]+[[:alnum:]]+" \
+
+    KERNEL_VALID_SRC_FILES=`find "${DIR_TO_BE_COUNT}" ! -path "./tools/*"  ! -path "./examples/*" \
+        ! -path \*/.built-in.o.cmd -name '.*.o.cmd' -print0 |  xargs -0 egrep ":=[[:space:]]+[[:alnum:]]+" \
         | grep -v '\-gcc' | grep -v  '\-ld' | grep -v ' := gcc'  | grep -v ' := g++' \
         | awk -F':=' '{print $2}' | grep -v 'scripts' | grep -v 'tools'`
+
+    if [ -z "${KERNEL_VALID_SRC_FILES}" ] ; then
+        echo "${Echo_Red_Text}Old kernel found! kernel version=[${KERN_VERSION}.${KERN_PATCHLEVEL}.${KERN_SUBLEVEL}]${Echo_Color_Reset}"
+        KERNEL_VALID_SRC_FILES=`find "${DIR_TO_BE_COUNT}" ! -path "./tools/*"  ! -path "./examples/*" \
+            ! -path \*/.built-in.o.cmd -name '.*.o.cmd' -print0 | xargs -0 egrep ":=[[:space:]]+[[:alnum:]]+" \
+            |  awk '{print $NF}' | sed '/^.*.o$/d' | sed '/--end-group/d'`
+    fi
 
     #######################################################################
     # .S .c .s source file list
@@ -152,6 +169,7 @@ if [ "${SOURCE_CODE_TYPE}" == "UBOOT_WITH_DOTCONFIG" -o "${SOURCE_CODE_TYPE}" ==
     Index=0
     for files in `echo "${KERNEL_VALID_SRC_FILES}" | sed -e 's/\ /\n/g'`; do
         DIR_OF_FILES=`dirname "${files}"`
+        #echo "${KERNEL_VALID_SRC_FILES}"  dirnames=${DIR_OF_FILES}
         if [ ! -e "${DIR_TO_BE_COUNT}"/"${files}" ]; then
             File_Not_Exist+="${DIR_TO_BE_COUNT}"/"${files}" 
             File_Not_Exist+=" "
